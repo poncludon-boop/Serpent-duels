@@ -1,5 +1,7 @@
 # 🐍 Serpent Duels
 
+> Gameplay system: **T.R.A.C.E.** (traced planning, turn-based with simultaneous resolution, body-length reach, power pellets) — see [TRACE-MECHANIQUE.md](./TRACE-MECHANIQUE.md) for the canonical vocabulary and tunables, reused by future games.
+
 Turn-based 3D strategy game with **simultaneous resolution**, built with Three.js in a single `index.html` file — no build step, no dependencies.
 
 ## Play
