@@ -19,17 +19,18 @@
   button:hover { background:#2e4470; }
   button:disabled { opacity:.35; cursor:default; }
   #legend { position:fixed; right:12px; bottom:12px; background:#1a2236cc; border:1px solid #2c3a5e; border-radius:10px;
-            padding:10px 14px; font-size:12px; line-height:1.7; max-width:230px; }
+            padding:10px 14px; font-size:12px; line-height:1.7; max-width:250px; }
   .lg { display:flex; align-items:center; gap:8px; }
   #hint { position:fixed; left:12px; bottom:12px; font-size:12px; color:#9db0d0; background:#1a2236aa;
           padding:6px 10px; border-radius:8px; }
+  #toast { position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#3a1520ee; border:1px solid #ff5555;
+           color:#ffd9d9; padding:8px 18px; border-radius:10px; font-size:14px; display:none; z-index:5; }
   #overlay { position:fixed; inset:0; background:#0b0e14f2; display:flex; flex-direction:column; align-items:center;
              justify-content:center; gap:18px; z-index:10; text-align:center; }
   #overlay h1 { font-size:34px; margin:0; }
-  #overlay p { max-width:520px; color:#aab8d6; line-height:1.6; margin:0; font-size:14px; }
-  #overlay .buttons { display:flex; gap:14px; margin-top:8px; }
-  #overlay button { font-size:16px; padding:12px 26px; }
-  #win { display:none; }
+  #overlay p { max-width:540px; color:#aab8d6; line-height:1.6; margin:0; font-size:14px; }
+  #overlay .buttons { display:flex; gap:12px; margin-top:8px; flex-wrap:wrap; justify-content:center; }
+  #overlay button { font-size:15px; padding:11px 22px; }
   #budget { position:fixed; top:52px; left:16px; font-size:13px; color:#ffd76a; text-shadow:0 1px 3px #000; }
 </style>
 <script type="importmap">
@@ -41,34 +42,40 @@
   <span id="status">—</span>
   <span id="chips"></span>
 </div>
+<div id="toast"></div>
 <div id="budget"></div>
 <div class="btns">
   <button id="btnClear">Effacer le tracé</button>
+  <button id="btnDash" style="display:none">⚡ Dash</button>
   <button id="btnResolve" disabled>Résolution ▶</button>
   <button id="btnMenu">Menu</button>
 </div>
 <div id="legend">
   <div class="lg"><span class="dot" style="background:#39d353"></span> Croissance (+5)</div>
   <div class="lg"><span class="dot" style="background:#ffd633"></span> Vitesse (départ éclair)</div>
-  <div class="lg"><span class="dot" style="background:#38bdf8"></span> Dash (traverse 1 obstacle)</div>
+  <div class="lg"><span class="dot" style="background:#38bdf8"></span> Dash (stocké, à activer)</div>
   <div class="lg"><span class="dot" style="background:#f87171"></span> Boule de feu (instantané)</div>
   <div class="lg"><span class="dot" style="background:#c084fc"></span> Scission (2 serpents)</div>
-  <div class="lg"><span class="dot" style="background:#fb923c"></span> Bicéphale (2e tête)</div>
+  <div class="lg"><span class="dot" style="background:#fb923c"></span> Bicéphale (corps + 2 cous, longueur ≥ 6)</div>
 </div>
 <div id="hint">Clic gauche : tracer le chemin depuis la tête • Clic droit : pivoter la caméra • Molette : zoom</div>
 
 <div id="overlay">
   <h1>🐍 Serpent Duels</h1>
-  <p>Stratégie au tour par tour. Phase de <b>planification</b> : trace à la souris le chemin que suivra la tête de ton serpent,
-  dans la limite de <b>sa propre longueur</b> (le cercle rétrécit au fur et à mesure). Phase de <b>résolution</b> :
-  les deux camps avancent en simultané. Mords le corps adverse pour le couper et le raccourcir&nbsp;;
-  s'il est trop court, il périt. Ramasse les pastilles pour gagner en puissance.</p>
-  <div class="buttons">
+  <p>Planification dessinée à la souris : le cercle jaune (ta portée, égale à la longueur du serpent) suit le tracé et rétrécit au fur et à mesure.
+  Puis résolution simultanée : mords le corps adverse pour le couper — trop court, il périt (surveille la queue !).
+  Ramasse les pastilles pour grandir, dasher, scinder ou devenir bicéphale.</p>
+  <div class="buttons" id="modeRow">
     <button id="btnAI">Jouer contre l'IA</button>
     <button id="btnPVP">2 joueurs (même écran)</button>
   </div>
+  <div class="buttons" id="diffRow" style="display:none">
+    <button id="btnDiffEasy">IA facile</button>
+    <button id="btnDiffMedium">IA moyenne</button>
+    <button id="btnDiffHard">IA difficile</button>
+    <button id="btnDiffBack">← Retour</button>
+  </div>
 </div>
-
 
 <script type="module">
 import * as THREE from 'three';
@@ -76,7 +83,6 @@ import * as THREE from 'three';
 const ARENA_R = 45;
 const SEG = 0.7;
 const BASE_SPEED = 14;
-const PICKUP_R = 1.1;
 const COLLECT_R = 1.3;
 
 const scene = new THREE.Scene();
@@ -90,9 +96,9 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.HemisphereLight(0x8fa7d9, 0x141a26, 1.1));
-const dir = new THREE.DirectionalLight(0xffffff, 1.4);
-dir.position.set(30, 60, 20);
-scene.add(dir);
+const lgt = new THREE.DirectionalLight(0xffffff, 1.4);
+lgt.position.set(30, 60, 20);
+scene.add(lgt);
 
 const ground = new THREE.Mesh(
   new THREE.CircleGeometry(ARENA_R, 96),
@@ -134,6 +140,7 @@ let snakes = [];
 let pills = [];
 let projectiles = [];
 let mode = 'AI';
+let aiDiff = 'medium';
 let phase = 'menu';
 let turn = 1;
 let planQueue = [];
@@ -147,30 +154,51 @@ let deadFx = [];
 const statusEl = document.getElementById('status');
 const chipsEl = document.getElementById('chips');
 const budgetEl = document.getElementById('budget');
+const toastEl = document.getElementById('toast');
 const btnResolve = document.getElementById('btnResolve');
 const btnClear = document.getElementById('btnClear');
+const btnDash = document.getElementById('btnDash');
 const btnMenu = document.getElementById('btnMenu');
 const overlay = document.getElementById('overlay');
+const modeRow = document.getElementById('modeRow');
+const diffRow = document.getElementById('diffRow');
 
 function allAliveSnakes(){ return snakes.filter(s => s.alive); }
 function snakesOf(pid){ return snakes.filter(s => s.alive && s.pid === pid); }
+function bodyLen(s){
+  if (!s.biceph) return s.length;
+  const n1 = Math.ceil(s.length/2);
+  const second = s.length - n1;
+  return n1 + (second % 2);
+}
+function neckLen(s){
+  if (!s.biceph) return 0;
+  const second = s.length - Math.ceil(s.length/2);
+  return Math.floor(second/2);
+}
+function minLenOf(s){ return s.biceph ? 6 : 4; }
 
 function makeSnake(pid, pos, dirVec, length, shade=0){
   const base = new THREE.Color(players[pid].color);
   if (shade) base.offsetHSL(0, 0, shade*0.04);
   const mat = new THREE.MeshStandardMaterial({ color:base, roughness:.4, emissive:base.clone().multiplyScalar(.15) });
+  const dangerMat = new THREE.MeshStandardMaterial({ color:0xff4444, roughness:.4, emissive:0x330000 });
   const headMat = new THREE.MeshStandardMaterial({ color:base.clone().offsetHSL(0,0,0.15), roughness:.25, emissive:base.clone().multiplyScalar(.4) });
   const s = {
-    pid, alive:true, length, mat, headMat,
+    pid, alive:true, length, mat, dangerMat, headMat,
     heads: [{ pos: pos.clone(), path:null, mesh:null }],
-    neckLen: 6, biceph:false,
-    trail: [], speedMult:1, dash:0,
+    biceph:false,
+    trail: [], speedMult:1, dash:0, dashArmed:false,
     meshes: [],
   };
-  for (let i=0;i<220;i++){
+  for (let i=0;i<240;i++){
     const m = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), mat);
     m.visible = false; scene.add(m); s.meshes.push(m);
   }
+  s.tailMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), dangerMat);
+  s.tailMesh.scale.setScalar(0.28);
+  s.tailMesh.visible = false;
+  scene.add(s.tailMesh);
   const h1 = s.heads[0];
   h1.mesh = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 12), headMat);
   scene.add(h1.mesh);
@@ -183,7 +211,7 @@ function makeSnake(pid, pos, dirVec, length, shade=0){
 }
 
 function bodyPoints(s){
-  const pts = [], n = s.length;
+  const pts = [], n = bodyLen(s);
   let dist = 0, idx = 0;
   const t = s.trail;
   pts.push(t[0].clone());
@@ -208,58 +236,77 @@ function trailIndexAt(trail, dist){
   return trail.length-1;
 }
 
+function attachPoint(s){
+  const pts = bodyPoints(s);
+  return pts[pts.length-1] || s.heads[0].pos;
+}
+
 function renderSnake(s){
   if (!s.alive){
     s.headMat.color.set(0x555a66);
     s.mat.color.set(0x4a4e58);
     s.mat.emissive.set(0x000000);
     s.headMat.emissive.set(0x000000);
+    s.dangerMat.color.set(0x4a4e58);
   }
   const pts = bodyPoints(s);
+  const inDanger = s.alive && s.length <= 2*minLenOf(s);
   for (let i=0;i<s.meshes.length;i++){
     const m = s.meshes[i];
     if (i < pts.length && s.alive){
       m.visible = true;
-      const r = 0.5 * (i===0 ? 1.15 : 1);
+      const taper = (pts.length >= 3 && i >= pts.length-3) ? (0.6 + 0.4*(i - (pts.length-3))/3) : 1;
+      const r = 0.5 * (i===0 ? 1.15 : 1) * (i===0 ? 1 : taper);
       m.position.set(pts[i].x, 0.42, pts[i].z);
       m.scale.setScalar(r);
+      m.material = inDanger ? s.dangerMat : s.mat;
     } else m.visible = false;
+  }
+  s.tailMesh.visible = s.alive && pts.length > 1;
+  if (s.tailMesh.visible){
+    const tail = pts[pts.length-1];
+    s.tailMesh.material = s.dangerMat;
+    s.tailMesh.position.set(tail.x, 0.34, tail.z);
   }
   const h1 = s.heads[0];
   h1.mesh.visible = s.alive;
   h1.mesh.position.set(h1.pos.x, 0.6, h1.pos.z);
   h1.mesh.scale.setScalar(1);
-  if (s.heads[1]){
-    const h2 = s.heads[1];
-    if (!h2.mesh){
-      h2.mesh = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 12), s.headMat);
-      scene.add(h2.mesh);
-      h2.neckLine = new THREE.Line(
+  const tailPt = pts[pts.length-1] || h1.pos;
+  for (let hi=1; hi<s.heads.length; hi++){
+    const h = s.heads[hi];
+    if (!h.mesh){
+      h.mesh = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 12), s.headMat);
+      scene.add(h.mesh);
+      h.neckLine = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
         new THREE.LineBasicMaterial({ color: players[s.pid].color, transparent:true, opacity:.8 })
       );
-      scene.add(h2.neckLine);
+      scene.add(h.neckLine);
     }
-    h2.mesh.visible = s.alive;
-    h2.mesh.position.set(h2.pos.x, 0.6, h2.pos.z);
-    const tailEl = pts[pts.length-1] || h1.pos;
-    h2.neckLine.visible = s.alive;
-    h2.neckLine.geometry.setFromPoints([
-      new THREE.Vector3(tailEl.x, 0.6, tailEl.z),
-      new THREE.Vector3(h2.pos.x, 0.6, h2.pos.z)
+    h.mesh.visible = s.alive;
+    h.mesh.position.set(h.pos.x, 0.6, h.pos.z);
+    h.neckLine.visible = s.alive;
+    h.neckLine.geometry.setFromPoints([
+      new THREE.Vector3(tailPt.x, 0.6, tailPt.z),
+      new THREE.Vector3(h.pos.x, 0.6, h.pos.z)
     ]);
   }
 }
 
 function spawnPill(type, pos){
   const colors = { GROW:0x39d353, SPEED:0xffd633, DASH:0x38bdf8, FIRE:0xf87171, SPLIT:0xc084fc, BICEPH:0xfb923c };
-  const g = new THREE.SphereGeometry(0.7, 14, 12);
-  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.7, 14, 12), new THREE.MeshStandardMaterial({
     color:colors[type], emissive:colors[type], emissiveIntensity:.55, roughness:.3
   }));
   m.position.set(pos.x, 0.8, pos.z);
   scene.add(m);
   pills.push({ type, mesh:m });
+}
+function pickPillType(){
+  if (turn <= 5) return 'GROW';
+  const list = ['GROW','GROW','SPEED','DASH','FIRE','SPLIT','BICEPH'];
+  return list[Math.floor(Math.random()*list.length)];
 }
 function randomPos(minR=5){
   const a = Math.random()*Math.PI*2, r = minR + Math.random()*(ARENA_R-6-minR);
@@ -268,38 +315,49 @@ function randomPos(minR=5){
 function pillAwayFromSnakes(){
   for (let tries=0; tries<40; tries++){
     const p = randomPos();
-    const heads = [];
-    for (const s of allAliveSnakes()) for (const h of s.heads) heads.push(h.pos);
-    if (heads.every(h => h.distanceTo(p) > 6)) return p;
+    const headsArr = [];
+    for (const s of allAliveSnakes()) for (const h of s.heads) headsArr.push(h.pos);
+    if (headsArr.every(h => h.distanceTo(p) > 6)) return p;
   }
   return randomPos();
 }
 
-const PILL_LIST = ['GROW','GROW','SPEED','DASH','FIRE','SPLIT','BICEPH'];
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toastEl.style.display = 'none'; }, 2600);
+}
 
-function startGame(m){
+function startGame(m, diff){
   mode = m;
+  aiDiff = diff || aiDiff;
   for (const s of snakes){
     for (const mesh of s.meshes) scene.remove(mesh);
+    if (s.tailMesh) scene.remove(s.tailMesh);
     for (const h of s.heads){ if (h.mesh) scene.remove(h.mesh); if (h.neckLine) scene.remove(h.neckLine); }
   }
   for (const p of pills) scene.remove(p.mesh);
   for (const pr of projectiles) scene.remove(pr.mesh);
   clearDraw();
-  snakes = []; pills = []; projectiles = []; movers = [];
+  snakes = []; pills = []; projectiles = []; movers = []; deadFx = [];
   players[0].alive = true; players[1].alive = true;
   turn = 1;
   const a = new THREE.Vector3(0, 0, 25), b = new THREE.Vector3(0, 0, -25);
   makeSnake(0, a, new THREE.Vector3(0,0,-1), 14);
-  if (m === 'PVP') makeSnake(1, b, new THREE.Vector3(0,0,1), 14);
-  else makeSnake(1, b, new THREE.Vector3(0,0,1), 14);
-  for (let i=0;i<4;i++) spawnPill(PILL_LIST[Math.floor(Math.random()*PILL_LIST.length)], pillAwayFromSnakes());
+  makeSnake(1, b, new THREE.Vector3(0,0,1), 14);
+  for (let i=0;i<4;i++) spawnPill(pickPillType(), pillAwayFromSnakes());
   overlay.style.display = 'none';
   phase = 'plan';
   buildPlanQueue();
 }
 
-document.getElementById('btnAI').onclick = () => startGame('AI');
+document.getElementById('btnAI').onclick = () => { modeRow.style.display = 'none'; diffRow.style.display = 'flex'; };
+document.getElementById('btnDiffBack').onclick = () => { diffRow.style.display = 'none'; modeRow.style.display = 'flex'; };
+document.getElementById('btnDiffEasy').onclick = () => startGame('AI', 'easy');
+document.getElementById('btnDiffMedium').onclick = () => startGame('AI', 'medium');
+document.getElementById('btnDiffHard').onclick = () => startGame('AI', 'hard');
 document.getElementById('btnPVP').onclick = () => startGame('PVP');
 btnMenu.onclick = () => { endToMenu(); };
 function endToMenu(){
@@ -307,45 +365,34 @@ function endToMenu(){
   clearDraw();
   document.querySelector('#overlay h1').textContent = '🐍 Serpent Duels';
   document.querySelector('#overlay p').innerHTML =
-    "Stratégie au tour par tour. Phase de <b>planification</b> : trace à la souris le chemin que suivra la tête de ton serpent, dans la limite de <b>sa propre longueur</b> (le cercle rétrécit au fur et à mesure). Phase de <b>résolution</b> : les deux camps avancent en simultané. Mords le corps adverse pour le couper et le raccourcir&nbsp;; s'il est trop court, il périt. Ramasse les pastilles pour gagner en puissance.";
+    "Planification dessinée à la souris : le cercle jaune (ta portée, égale à la longueur du serpent) suit le tracé et rétrécit au fur et à mesure. Puis résolution simultanée : mords le corps adverse pour le couper — trop court, il périt. Ramasse les pastilles pour grandir, dasher, scinder ou devenir bicéphale.";
+  diffRow.style.display = 'none';
+  modeRow.style.display = 'flex';
   overlay.style.display = 'flex';
   updateHUD('Sélectionne un mode');
 }
 
 function buildPlanQueue(){
   planQueue = [];
-  const order = [0, 1];
-  for (const pid of order){
+  for (const pid of [0, 1]){
     for (const s of snakesOf(pid)){
       if (mode === 'AI' && pid === 1) continue;
-      planQueue.push({ snake:s, headIdx:0 });
-      if (s.heads[1]) planQueue.push({ snake:s, headIdx:1 });
+      for (let hi=0; hi<s.heads.length; hi++) planQueue.push({ snake:s, headIdx:hi });
     }
   }
   planStep = 0;
   drawnPath = [];
-  if (mode === 'AI'){
-    for (const s of snakesOf(1)){
-      for (let hi=0; hi<s.heads.length; hi++){
-        const h = s.heads[hi];
-        if (hi === 1){ const tail = bodyPoints(s).at(-1) || h.pos; h.pos.copy(tail); }
-        h.maxLen = (hi === 1) ? s.heads[1].neckLen * SEG : s.length * SEG;
-        h.path = aiPlan(s, h);
-        applyPlanBudget(s, h);
-      }
-    }
-  }
   beginPlanStep();
 }
 
 function applyPlanBudget(snake, head){
-  const budget = head.maxLen || (snake.length * SEG);
+  const budget = (head.maxLen != null) ? head.maxLen : (snake.length * SEG);
   head.maxLen = null;
   let total = 0;
   const out = [];
   for (let i=1;i<head.path.length;i++){
     const step = head.path[i].distanceTo(head.path[i-1]);
-    if (total + step > budget){ 
+    if (total + step > budget){
       const remain = budget - total;
       const dirv = head.path[i].clone().sub(head.path[i-1]).normalize();
       if (remain > 0.05) out.push(head.path[i-1].clone().add(dirv.multiplyScalar(remain)));
@@ -365,40 +412,60 @@ function beginPlanStep(){
   const st = planQueue[planStep];
   drawnPath = [];
   clearDraw();
-  const isHead2 = st.headIdx === 1;
+  const isHead2 = st.headIdx >= 1;
   const head = st.snake.heads[st.headIdx];
-  if (isHead2){
-    const tail = bodyPoints(st.snake).at(-1) || head.pos;
-    head.pos.copy(tail);
-  }
-  head.maxLen = isHead2 ? st.snake.heads[1].neckLen * SEG : st.snake.length * SEG;
+  if (isHead2) head.pos.copy(attachPoint(st.snake));
+  head.maxLen = isHead2 ? neckLen(st.snake) * SEG : st.snake.length * SEG;
   head.path = [head.pos.clone()];
   updateDrawVisuals();
-  updateHUD(`${players[st.snake.pid].name} — trace le chemin, ${isHead2 ? 'tête secondaire (bicéphale)' : 'corps + tête du Serpent'}`);
+  const label = st.headIdx === 0 ? 'corps + tête principale' : `tête ${st.headIdx === 1 ? 'A' : 'B'} (bicéphale)`;
+  updateHUD(`${players[st.snake.pid].name} — trace le chemin, ${label}`);
   btnResolve.disabled = true;
+  btnDash.style.display = st.snake.dash > 0 ? 'block' : 'none';
+  updateDashButton(st.snake);
 }
+
+function updateDashButton(s){
+  btnDash.textContent = s.dashArmed ? `⚡ Dash ACTIVÉ (${s.dash})` : `⚡ Dash (${s.dash})`;
+  btnDash.style.background = s.dashArmed ? '#7c4a12' : '#233355';
+}
+btnDash.onclick = () => {
+  if (phase !== 'plan' || planStep === null || planStep >= planQueue.length) return;
+  const s = planQueue[planStep].snake;
+  if (s.dash <= 0) return;
+  s.dashArmed = !s.dashArmed;
+  updateDashButton(s);
+};
 
 function finishPlanning(){
   clearDraw();
   phase = 'resolve';
   btnResolve.disabled = true;
+  btnDash.style.display = 'none';
+  if (mode === 'AI'){
+    for (const s of snakesOf(1)){
+      for (let hi=0; hi<s.heads.length; hi++){
+        const h = s.heads[hi];
+        if (hi >= 1) h.pos.copy(attachPoint(s));
+        h.maxLen = (hi === 0) ? s.length * SEG : neckLen(s) * SEG;
+        h.path = aiPlan(s, h);
+        applyPlanBudget(s, h);
+      }
+    }
+  }
   movers = [];
   for (const s of allAliveSnakes()){
     for (let hi=0; hi<s.heads.length; hi++){
       const h = s.heads[hi];
-      movers.push({ snake:s, head:h, hi, dist:0, path:(h.path && h.path.length>1) ? h.path : null, len:(h.path? pathLength(h.path):0) });
+      movers.push({ snake:s, head:h, hi, dist:0, path:(h.path && h.path.length>1) ? h.path : null, len:(h.path ? pathLength(h.path) : 0) });
     }
   }
-  beginResolve();
+  updateHUD(`Tour ${turn} — Résolution simultanée !`);
 }
 
 function pathLength(p){
   let d=0; for (let i=1;i<p.length;i++) d += p[i].distanceTo(p[i-1]);
   return d;
-}
-
-function beginResolve(){
-  updateHUD(`Tour ${turn} — Résolution simultanée !`);
 }
 
 function pointAt(path, d){
@@ -414,31 +481,55 @@ function pointAt(path, d){
   return path[path.length-1].clone();
 }
 
-function killSnake(s){
+function killSnake(s, reason){
   if (!s.alive) return;
   s.alive = false;
   renderSnake(s);
-  const p = players[s.pid];
-  if (snakesOf(s.pid).length === 0) p.alive = false;
+  const spot = s.heads[0].pos.clone();
+  for (let i=0;i<10;i++){
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), s.dangerMat);
+    m.position.set(spot.x, 0.6, spot.z);
+    scene.add(m);
+    const a = Math.random()*Math.PI*2;
+    deadFx.push({ mesh:m, vel:new THREE.Vector3(Math.cos(a)*6, 5+Math.random()*4, Math.sin(a)*6), ttl:0.7 });
+  }
+  if (reason === 'short') toast(`${players[s.pid].name} : serpent trop court, il périt !`);
+  else if (reason === 'border') toast(`${players[s.pid].name} : serpent perdu dans le vide le long du bord !`);
+  else if (reason === 'head') toast(`${players[s.pid].name} : choc de têtes, serpent détruit !`);
+  else toast(`${players[s.pid].name} : serpent détruit !`);
+  if (snakesOf(s.pid).length === 0) players[s.pid].alive = false;
 }
 
-function cutSnake(s, k){
-  const minLen = s.heads[1] ? 8 : 4;
-  if (k < minLen){ killSnake(s); return; }
-  s.length = k;
-  if (s.heads[1] && s.heads[1].neckLen >= s.length-2) s.heads[1].neckLen = Math.max(2, s.length-2);
+function setLen(s, k){
+  const min = minLenOf(s);
+  if (k < min){ killSnake(s, 'short'); return; }
+  if (s.biceph){
+    const neckMat = s.length - bodyLen(s);
+    let newLen = k + neckMat;
+    const n1b = bodyLen({ biceph:true, length:newLen });
+    if (n1b < 3){
+      s.biceph = false;
+      for (let hi=1; hi<s.heads.length; hi++){
+        if (s.heads[hi].mesh) scene.remove(s.heads[hi].mesh);
+        if (s.heads[hi].neckLine) scene.remove(s.heads[hi].neckLine);
+      }
+      s.heads = [s.heads[0]];
+      newLen = k;
+    }
+    s.length = newLen;
+  } else s.length = k;
   renderSnake(s);
 }
 
+function cutSnake(s, k){ setLen(s, k); }
+
 function useDash(s){
-  if (s.dash > 0){ s.dash--; return true; }
+  if (s.dashArmed && s.dash > 0){ s.dash--; s.dashArmed = false; return true; }
   return false;
 }
 
 function fireball(from, victim){
-  victim.length = Math.max(5, Math.floor(victim.length * 0.75));
-  renderSnake(victim);
-  if (victim.length <= 5 && Math.random() < 1) {} 
+  setLen(victim, Math.max(minLenOf(victim), Math.floor(victim.length * 0.75)));
   const flash = new THREE.PointLight(0xff6633, 8, 12);
   flash.position.set(victim.heads[0].pos.x, 1, victim.heads[0].pos.z);
   scene.add(flash);
@@ -454,33 +545,33 @@ function resolveStep(dt){
     m.dist = Math.min(m.len, m.dist + BASE_SPEED * m.snake.speedMult * dt);
     const p = pointAt(m.path, m.dist);
     m.head.pos.copy(p);
-    if (m.hi === 1){
-      const tail = bodyPoints(m.snake).at(-1);
-      if (tail){
-        const maxD = m.snake.heads[1].neckLen * SEG * 1.15;
-        if (tail.distanceTo(p) > maxD){
-          m.head.pos.copy(tail).add(p.clone().sub(tail).setLength(maxD));
-        }
+    if (m.hi >= 1){
+      const tail = attachPoint(m.snake);
+      const maxD = neckLen(m.snake) * SEG * 1.15;
+      if (tail.distanceTo(p) > maxD){
+        m.head.pos.copy(tail).add(p.clone().sub(tail).setLength(maxD));
       }
     }
   }
   for (const s of allAliveSnakes()){
     s.trail.unshift(s.heads[0].pos.clone());
-    const cap = (s.length * SEG) / 0.35 * 3 + 40;
+    const cap = Math.floor((s.length * SEG) / 0.35 * 3 + 40);
     if (s.trail.length > cap) s.trail.length = cap;
   }
   for (const s of allAliveSnakes()){
-    for (const h of s.heads){
+    for (let hi=0; hi<s.heads.length; hi++){
+      const h = s.heads[hi];
       if (!s.alive) break;
       if (h.pos.length() > ARENA_R - 0.8){
-        if (h === s.heads[0]){ if (!useDash(s)) killSnake(s); }
-        else killSnake(s);
+        if (hi === 0){ if (!useDash(s)) killSnake(s, 'border'); }
+        else killSnake(s, 'border');
         break;
       }
     }
   }
   for (const s of allAliveSnakes()){
-    for (const h of s.heads){
+    for (let hi=0; hi<s.heads.length; hi++){
+      const h = s.heads[hi];
       if (!s.alive) break;
       outer:
       for (const s2 of allAliveSnakes()){
@@ -499,12 +590,12 @@ function resolveStep(dt){
     }
   }
   const headsAll = [];
-  for (const s of allAliveSnakes()) for (const h of s.heads) headsAll.push({s, h});
+  for (const s of allAliveSnakes()) for (let hi=0; hi<s.heads.length; hi++) headsAll.push({s, h:s.heads[hi]});
   for (let i=0;i<headsAll.length;i++) for (let j=i+1;j<headsAll.length;j++){
     const A = headsAll[i], B = headsAll[j];
     if (A.s === B.s || !A.s.alive || !B.s.alive) continue;
     if (A.h.pos.distanceTo(B.h.pos) < 1.4){
-      if (!useDash(A.s) && !useDash(B.s)){ killSnake(A.s); killSnake(B.s); }
+      if (!useDash(A.s) && !useDash(B.s)){ killSnake(A.s, 'head'); killSnake(B.s, 'head'); }
     }
   }
   for (const s of allAliveSnakes()){
@@ -531,59 +622,58 @@ function resolveStep(dt){
     if (boom){ scene.remove(pr.mesh); projectiles.splice(i,1); }
   }
   for (const s of snakes) renderSnake(s);
-  if (!active){
-    endResolve();
-  }
+  if (!active) endResolve();
 }
 
 function collect(s, pill){
   pills.splice(pills.indexOf(pill), 1);
   scene.remove(pill.mesh);
-  if (pill.type === 'GROW'){ s.length += 5; }
+  if (pill.type === 'GROW'){ s.length = Math.min(220, s.length + 5); }
   else if (pill.type === 'SPEED'){ s.speedMult = 1.8; }
   else if (pill.type === 'DASH'){ s.dash++; }
   else if (pill.type === 'FIRE'){
     const foes = allAliveSnakes().filter(x => x.pid !== s.pid);
     if (foes.length){
       const target = foes[0].heads[0].pos.clone();
-      const path = [s.heads[0].pos.clone(), target];
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8),
         new THREE.MeshStandardMaterial({ color:0xff6633, emissive:0xff4400, emissiveIntensity:1 }));
       mesh.position.copy(s.heads[0].pos);
       scene.add(mesh);
-      projectiles.push({ owner:s, path, len:s.heads[0].pos.distanceTo(target), dist:0, mesh });
+      projectiles.push({ owner:s, path:[s.heads[0].pos.clone(), target], len:s.heads[0].pos.distanceTo(target), dist:0, mesh });
     }
   }
   else if (pill.type === 'SPLIT'){
-    const half = Math.floor(s.length/2);
+    const half = Math.floor(bodyLen(s)/2);
     if (half >= 5){
       const bp = bodyPoints(s);
       const mid = bp[half];
       const idx = trailIndexAt(s.trail, half * SEG);
       const cloneTrail = s.trail.slice(Math.max(0, idx-1)).map(v=>v.clone());
-      s.length = half;
+      const neckMat = s.biceph ? (s.length - bodyLen(s)) : 0;
+      s.length = half + neckMat;
       renderSnake(s);
-      const shade = s.heads[1] ? 2 : 1;
-      const clone = makeSnake(s.pid, mid.clone(), new THREE.Vector3(1,0,0), half, shade);
+      const clone = makeSnake(s.pid, mid.clone(), new THREE.Vector3(1,0,0), Math.max(5, s.length - half), (s.heads[1]?2:1));
       if (cloneTrail.length){ clone.trail = cloneTrail; clone.trail[0] = mid.clone(); }
       renderSnake(clone);
     }
   }
   else if (pill.type === 'BICEPH'){
-    if (!s.heads[1]){
-      const bp = bodyPoints(s);
-      const tail = bp[bp.length-1];
-      const h2 = { pos:tail.clone(), path:null, mesh:null, neckLen: Math.min(6, Math.floor(s.length/3)) };
-      s.heads.push(h2);
+    if (!s.biceph && bodyLen(s) >= 3 && s.length >= 6){
+      const att = attachPoint(s).clone();
       s.biceph = true;
+      s.heads.push({ pos:att, path:null, mesh:null });
+      s.heads.push({ pos:att.clone(), path:null, mesh:null });
       renderSnake(s);
+    } else {
+      spawnPill('BICEPH', pill.mesh.position.clone());
+      toast(`${players[s.pid].name} : serpent trop court pour devenir bicéphale (corps ≥ 3 requis)`);
     }
   }
   renderSnake(s);
 }
 
 function endResolve(){
-  for (const s of allAliveSnakes()) s.speedMult = 1;
+  for (const s of allAliveSnakes()){ s.speedMult = 1; s.dashArmed = false; }
   const p0 = snakesOf(0).length > 0, p1 = snakesOf(1).length > 0;
   if (!p0 || !p1){
     phase = 'gameover';
@@ -592,7 +682,7 @@ function endResolve(){
     return;
   }
   turn++;
-  if (pills.length < 4) spawnPill(PILL_LIST[Math.floor(Math.random()*PILL_LIST.length)], pillAwayFromSnakes());
+  if (pills.length < 4) spawnPill(pickPillType(), pillAwayFromSnakes());
   phase = 'plan';
   buildPlanQueue();
 }
@@ -601,6 +691,9 @@ function showWin(msg){
   overlay.style.display = 'flex';
   document.querySelector('#overlay h1').textContent = '🏆 ' + msg;
   document.querySelector('#overlay p').innerHTML = 'Rejoue pour tenter ta revanche.';
+  modeRow.style.display = 'none';
+  diffRow.style.display = 'none';
+  updateHUD(msg);
 }
 
 function updateHUD(txt){
@@ -611,17 +704,17 @@ function updateHUD(txt){
     c.className = 'chip';
     const col = '#' + players[s.pid].color.toString(16).padStart(6,'0');
     const tags = [];
-    if (s.dash) tags.push('⚡'+s.dash);
-    if (s.speedMult>1) tags.push('💨');
-    if (s.biceph) tags.push('2×');
-    c.innerHTML = `<span class="dot" style="background:${col}"></span> ${players[s.pid].name} · ${s.length}${tags.length?' '+tags.join(' '):''}`;
+    if (s.dash) tags.push(`⚡${s.dash}${s.dashArmed?'✓':''}`);
+    if (s.speedMult > 1) tags.push('💨');
+    if (s.biceph) tags.push('2 têtes');
+    c.innerHTML = `<span class="dot" style="background:${col}"></span> ${players[s.pid].name} · ${s.length}${tags.length ? ' ' + tags.join(' ') : ''}`;
     chipsEl.appendChild(c);
   }
-  if (planStep !== null && planStep < planQueue.length && phase === 'plan'){
+  if (phase === 'plan' && planStep !== null && planStep < planQueue.length){
     const st = planQueue[planStep];
     const head = st.snake.heads[st.headIdx];
-    const budget = st.headIdx === 1 ? st.snake.heads[1].neckLen * SEG : st.snake.length * SEG;
-    const used = pathLength(drawnPath.length ? [head.path[0], ...drawnPath] : [head.pos, head.pos]);
+    const budget = (head.maxLen != null) ? head.maxLen : st.snake.length * SEG;
+    const used = drawnPath.length ? pathLength([head.path[0], ...drawnPath]) : 0;
     budgetEl.textContent = `Portée (longueur du serpent) : ${Math.max(0, budget - used).toFixed(1)} unités restantes`;
   } else budgetEl.textContent = '';
 }
@@ -636,16 +729,16 @@ function updateDrawVisuals(){
   if (phase !== 'plan' || planStep === null || planStep >= planQueue.length) return;
   const st = planQueue[planStep];
   const head = st.snake.heads[st.headIdx];
-  const isHead2 = st.headIdx === 1;
-  const budget = isHead2 ? st.snake.heads[1].neckLen * SEG : st.snake.length * SEG;
+  const budget = (head.maxLen != null) ? head.maxLen : st.snake.length * SEG;
+  const tip = drawnPath.length ? drawnPath[drawnPath.length-1] : head.pos;
   const used = drawnPath.length ? pathLength([head.path[0], ...drawnPath]) : 0;
-  const remaining = Math.max(0.01, budget - used);
+  const remaining = Math.max(0.02, budget - used);
   ringMesh = new THREE.Mesh(
     new THREE.RingGeometry(0.96, 1, 96),
     new THREE.MeshBasicMaterial({ color:0xffd76a, transparent:true, opacity:.7, side:THREE.DoubleSide })
   );
   ringMesh.rotation.x = -Math.PI/2;
-  ringMesh.position.set(head.pos.x, 0.15, head.pos.z);
+  ringMesh.position.set(tip.x, 0.15, tip.z);
   ringMesh.scale.setScalar(remaining);
   scene.add(ringMesh);
   const pts = [head.path[0].clone().setY(0.2), ...drawnPath.map(p=>p.clone().setY(0.2))];
@@ -679,13 +772,15 @@ renderer.domElement.addEventListener('pointerdown', (e)=>{
   }
 });
 let dragging = false, lastX = 0, lastY = 0;
-addEventListener('pointerup', ()=>{ 
+addEventListener('pointerup', ()=>{
   if (drawing && phase === 'plan' && planStep !== null && planStep < planQueue.length){
     const st = planQueue[planStep];
-    st.snake.heads[st.headIdx].path = [planQueue[planStep].snake.heads[st.headIdx].path[0], ...drawnPath];
-    applyPlanBudget(st.snake, st.snake.heads[st.headIdx]);
+    const head = st.snake.heads[st.headIdx];
+    head.path = [head.path[0], ...drawnPath];
+    applyPlanBudget(st.snake, head);
     updateDrawVisuals();
-    btnResolve.disabled = false; btnResolve.textContent = (planStep+1 < planQueue.length) ? 'Valider le tracé ✓' : 'Résolution ▶';
+    btnResolve.disabled = false;
+    btnResolve.textContent = (planStep+1 < planQueue.length) ? 'Valider le tracé ✓' : 'Résolution ▶';
   }
   drawing = false; dragging = false;
 });
@@ -702,14 +797,12 @@ addEventListener('pointermove', (e)=>{
   if (!g) return;
   const st = planQueue[planStep];
   const head = st.snake.heads[st.headIdx];
-  const isHead2 = st.headIdx === 1;
-  const budget = isHead2 ? st.snake.heads[1].neckLen * SEG : st.snake.length * SEG;
   const ptsBase = [head.path[0], ...drawnPath];
   const used = drawnPath.length ? pathLength(ptsBase) : 0;
   const last = ptsBase[ptsBase.length-1] || head.pos;
   const step = g.distanceTo(last);
   if (step < 0.4) return;
-  const remain = budget - used;
+  const remain = (head.maxLen != null ? head.maxLen : st.snake.length * SEG) - used;
   if (remain <= 0) return;
   let np = g.clone();
   if (step > remain){
@@ -730,7 +823,7 @@ btnClear.onclick = ()=>{
   drawnPath = [];
   st.snake.heads[st.headIdx].path = [st.snake.heads[st.headIdx].pos.clone()];
   updateDrawVisuals();
-  updateHUD('Tracé effacé — redessine');
+  updateHUD('Tracé effacé — redessine (le cercle part de la tête, puis suit le tracé)');
   btnResolve.disabled = false;
   btnResolve.textContent = 'Résolution ▶';
 };
@@ -738,8 +831,9 @@ btnClear.onclick = ()=>{
 btnResolve.onclick = ()=>{
   if (phase !== 'plan' || planStep === null || planStep >= planQueue.length) return;
   const st = planQueue[planStep];
-  st.snake.heads[st.headIdx].path = [st.snake.heads[st.headIdx].path[0], ...drawnPath];
-  applyPlanBudget(st.snake, st.snake.heads[st.headIdx]);
+  const head = st.snake.heads[st.headIdx];
+  head.path = [head.path[0], ...drawnPath];
+  applyPlanBudget(st.snake, head);
   planStep++;
   if (planStep < planQueue.length){
     beginPlanStep();
@@ -750,55 +844,135 @@ btnResolve.onclick = ()=>{
   }
 };
 
-function aiPlan(snake, head){
-  const budget = snake.length * SEG;
-  const foes = allAliveSnakes().filter(x => x.pid !== snake.pid);
-  const bodies = [];
-  for (const s2 of allAliveSnakes()){
-    const bp = bodyPoints(s2);
-    for (let k=1;k<bp.length;k++) bodies.push(bp[k]);
-  }
-  let best = null, bestScore = -1e9;
-  const baseDir = new THREE.Vector3();
-  let target = null, tpill = null;
-  if (pills.length){
-    let bd = 1e9;
-    for (const p of pills){
-      const d = p.mesh.position.distanceTo(head.pos);
-      if (d < bd){ bd = d; tpill = p.mesh.position; }
+function foePredictedPoints(foreseeFuture){
+  const foes = snakesOf(0);
+  if (!foes.length) return [];
+  const pts = [];
+  for (const s0 of foes){
+    for (const p of bodyPoints(s0)) pts.push(p.clone());
+    const h = s0.heads[0];
+    if (foreseeFuture && h.path && h.path.length > 1){
+      const L = pathLength(h.path);
+      for (let d=1; d<=L; d+=1.5) pts.push(pointAt(h.path, d));
     }
   }
-  target = tpill ? tpill.clone() : (foes.length ? foes[0].heads[0].pos.clone() : randomPos(10));
-  baseDir.copy(target).sub(head.pos).normalize();
+  return pts;
+}
+
+function playerHeadTimeline(){
+  const foes = snakesOf(0);
+  if (!foes.length) return [];
+  const out = [];
+  const s0 = foes[0];
+  const h = s0.heads[0];
+  const L = (h.path && h.path.length > 1) ? pathLength(h.path) : 0;
+  for (let t=0; t<=4; t+=0.1){
+    const d = Math.min(L, BASE_SPEED * s0.speedMult * t);
+    out.push({ t, p: pointAt(h.path && h.path.length>1 ? h.path : [h.pos.clone(), h.pos.clone()], d) });
+  }
+  return out;
+}
+
+function aiPlan(snake, head){
+  const budget = (head.maxLen != null) ? head.maxLen : snake.length * SEG;
+  const foes = snakesOf(0);
+  const staticBodies = [];
+  for (const s0 of snakes){
+    if (s0 === snake) continue;
+    const bp = bodyPoints(s0);
+    const start = 1;
+    for (let k=start;k<bp.length;k++) staticBodies.push(bp[k]);
+  }
+  const predicted = aiDiff === 'easy' ? [] : foePredictedPoints(aiDiff === 'hard');
+  const timeline = aiDiff === 'hard' ? playerHeadTimeline() : [];
+
+  let target = null, tpill = null, attackTarget = null;
+  if (aiDiff === 'easy'){
+    const ang = Math.atan2(head.pos.z, head.pos.x);
+    target = new THREE.Vector3(Math.cos(ang)*(ARENA_R-3), 0, Math.sin(ang)*(ARENA_R-3));
+  } else if (aiDiff === 'hard'){
+    if (foes.length){
+      const h0 = foes[0].heads[0];
+      const L = (h0.path && h0.path.length > 1) ? pathLength(h0.path) : 0;
+      if (L > 1){
+        for (let d=2; d<L; d+=1.5){
+          const P = pointAt(h0.path, d);
+          const tPlayer = d / (BASE_SPEED * foes[0].speedMult);
+          const dist = head.pos.distanceTo(P);
+          if (dist > budget) continue;
+          const tAI = dist / (BASE_SPEED * snake.speedMult);
+          if (Math.abs(tAI - tPlayer) < 0.4 && P.length() < ARENA_R - 1.2){ attackTarget = P; break; }
+        }
+      }
+    }
+    target = attackTarget || (pills.length ? pills[0].mesh.position : head.pos.clone());
+  } else {
+    if (pills.length){
+      let bd = 1e9;
+      for (const p of pills){
+        const d = p.mesh.position.distanceTo(head.pos);
+        if (d < bd){ bd = d; tpill = p.mesh.position; }
+      }
+      target = tpill.clone();
+    } else if (foes.length) target = foes[0].heads[0].pos.clone();
+    else target = head.pos.clone();
+  }
+
+  const baseDir = target.clone().sub(head.pos);
+  if (baseDir.length() < 0.01) baseDir.set(1, 0, 0);
+  baseDir.normalize();
+
+  let best = null, bestScore = -1e9, bestCollided = false;
   const angles = [0, .35, -.35, .7, -.7, 1.1, -1.1, 1.7, -1.7, 2.4, -2.4, 3.14];
   for (const a of angles){
     const dirv = baseDir.clone().applyAxisAngle(new THREE.Vector3(0,1,0), a);
     const path = [head.pos.clone()];
     let d = 1.0, collided = false, traveled = 0;
+    const borderLimit = aiDiff === 'easy' ? ARENA_R - 0.85 : ARENA_R - 1.5;
     while (traveled < budget){
       const np = head.pos.clone().add(dirv.clone().multiplyScalar(d));
       const segLen = np.distanceTo(path[path.length-1]);
       if (traveled + segLen > budget) break;
-      if (np.length() > ARENA_R - 1.5){ collided = true; break; }
+      if (np.length() > borderLimit){
+        if (aiDiff === 'easy'){ path.push(np); collided = true; }
+        break;
+      }
       let danger = false;
-      for (const b of bodies){
+      for (const b of staticBodies){
         if (b.distanceTo(head.pos) < 2.5) continue;
         if (np.distanceTo(b) < 1.1){ danger = true; break; }
+      }
+      if (!danger && predicted.length && !(attackTarget && np.distanceTo(attackTarget) < 2.0)){
+        for (const b of predicted){
+          if (np.distanceTo(b) < 1.1){ danger = true; break; }
+        }
+      }
+      if (!danger && timeline.length && !attackTarget){
+        for (const itm of timeline){
+          if (np.distanceTo(itm.p) < 1.5){ danger = true; break; }
+        }
       }
       if (danger){ collided = true; break; }
       traveled += segLen;
       path.push(np);
       d += 1.0;
     }
-    let score = path.length > 1
-      ? (100 - Math.abs(a) * 15
-      + (tpill && trailNear(path, tpill) ? 60 : 0)
-      + (foes.length && trailNear(path, foes[0].heads[0].pos) ? 30 : 0)
-      - (collided ? 40 : 0))
-      : -1e9;
-    if (score > bestScore){ bestScore = score; best = path; }
+    if (path.length < 2) continue;
+    const endPos = path[path.length-1];
+    let score = 100 - Math.abs(a) * 15 - (collided ? 40 : 0);
+    if (tpill && trailNear(path, tpill)) score += 60;
+    if (foes.length && trailNear(path, foes[0].heads[0].pos)) score += 30;
+    if (attackTarget && trailNear(path, attackTarget)) score += 120;
+    if (aiDiff === 'easy'){
+      score += endPos.length() * 2;
+      for (const p of pills) if (trailNear(path, p.mesh.position)) score -= 80;
+      score -= (traveled < budget * 0.25) ? 20 : 0;
+    }
+    if (score > bestScore){ bestScore = score; best = path; bestCollided = collided; }
   }
-  return best && best.length > 1 ? best : [head.pos.clone(), head.pos.clone().add(new THREE.Vector3(0,0,0.1))];
+  if (!best || best.length < 2) best = [head.pos.clone(), head.pos.clone().add(new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).setLength(1))];
+  if (aiDiff !== 'easy' && bestCollided && snake.dash > 0) snake.dashArmed = true;
+  return best;
 }
 function trailNear(path, p){
   for (const q of path) if (q.distanceTo(p) < 2.5) return true;
@@ -810,17 +984,15 @@ let pillTimer = 4;
 function loop(){
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
-  if (phase === 'resolve'){
-    resolveStep(dt);
-    updateHUD(`Tour ${turn} — Résolution simultanée !`);
-    pillTimer -= dt;
-  } else if (phase === 'plan'){
-    for (const s of allAliveSnakes()) renderSnake(s);
-    pillTimer -= dt;
-  }
-  if (pillTimer <= 0 && (phase === 'plan') && pills.length < 8){
-    spawnPill(PILL_LIST[Math.floor(Math.random()*PILL_LIST.length)], pillAwayFromSnakes());
-    pillTimer = 6;
+  if (phase === 'resolve') resolveStep(dt);
+  else if (phase === 'plan') for (const s of allAliveSnakes()) renderSnake(s);
+  for (let i=deadFx.length-1;i>=0;i--){
+    const fx = deadFx[i];
+    fx.ttl -= dt;
+    fx.vel.y -= 12 * dt;
+    fx.mesh.position.add(fx.vel.clone().multiplyScalar(dt));
+    fx.mesh.scale.multiplyScalar(Math.max(0, 1 - dt*1.5));
+    if (fx.ttl <= 0){ scene.remove(fx.mesh); deadFx.splice(i,1); }
   }
   const t = clock.elapsedTime;
   for (const p of pills) p.mesh.position.y = 0.8 + Math.sin(t*2 + p.mesh.position.x)*0.15;
