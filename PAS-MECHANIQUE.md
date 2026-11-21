@@ -1,47 +1,21 @@
-# 📐 PAS — Dossier de mécanique de jeu
+# 📐 PAS / Sillage
 
-Système de gameplay créé sur *Serpent Duels*, réutilisable dans d'autres jeux.
-Deux noms officiels uniquement : **PAS** (le gameplay) et **sillage** (le déplacement).
+Deux noms officiels, deux définitions.
 
-## PAS : le gameplay
+## PAS
 
-Un jeu « PAS » (un pas à la fois, au tour par tour) se joue ainsi :
-1. les joueurs **dessinent** leurs déplacements (souris/doigt),
-2. les plans sont exécutés **en simultané** après validation de tous les camps,
-3. la capacité de déplacement dépend du **sillage** de l'avatar,
-4. des pastilles de pouvoir sur la carte modifient les capacités entre deux tours.
+Le gameplay : **dessiner ses déplacements, tour par tour, résolution simultanée.**
 
-## Sillage : le déplacement
+- à ton tour, tu traces à la souris ou au doigt le mouvement de ton avatar,
+- quand tous les camps ont tracé, tout se joue en même temps.
 
-Le **sillage** est la règle de déplacement fondamentale : la portée de déplacement
-d'une entité est égale à sa longueur corporelle — elle laisse derrière elle un sillage,
-et c'est ce sillage qui mesure ce qu'elle peut encore parcourir.
+## Sillage
 
-- grandir = gagner de sillage (aller plus loin au tour suivant),
-- se faire couper = perdre du sillage,
-- le budget se « dépense » au fil du tracé, quand le sillage s'assèche.
+Le déplacement : **cercle virtuel de portée qui rétrécit au fur et à mesure du déplacement.**
 
-## Règles courantes (sans nom spécial)
+- un cercle matérialise ce qu'il reste à parcourir,
+- chaque portion tracée le fait rétrécir,
+- il s'épuise en même temps que le déplacement.
 
-- Planification au tour par tour, résolution simultanée
-- Morsure : une tête qui traverse un corps le coupe à ce point ; la partie arrière est perdue
-- Il existe une longueur minimale en dessous de laquelle l'entité périt
-- Pastilles : croissance, vitesse, dash (stocké, activé à la planification),
-  feu instantané, scission en deux entités, forme bicéphale (corps + 2 cous égaux vers l'avant)
-
-## Réglages actuels (Serpent Duels)
-
-| Constante | Valeur | Signification |
-|---|---|---|
-| `SEG` | 0.7 | Longueur d'un segment (unité de sillage) |
-| `BASE_SPEED` | 14 | Vitesse de résolution (unités/s) |
-| `ARENA_R` | 45 | Rayon de l'arène |
-| `INIT_LEN` | 24 | Longueur initiale en segments |
-| `PILL_START / PILL_MAX / PILL_EVERY` | 6 / 12 / 3.5s | Densité de pastilles |
-| Longueur minimale | 4 (ou 6 en bicéphale) | Segments restants minimum |
-
-## IA par paliers (référence pour futurs jeux)
-
-- **Facile** : analyse le joueur, fuit, ne collecte pas — joue pour perdre
-- **Moyenne** : collecte maximale + attaques d'opportunité
-- **Difficile** : simule les deux mouvements dans le temps, intercepte la trajectoire future, sinon se met en parade défensive ; arme son dash si coincée
+---
+*Définis sur « Serpent Duels », réutilisables pour les prochains jeux.*

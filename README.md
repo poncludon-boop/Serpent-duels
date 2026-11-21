@@ -1,6 +1,6 @@
 # 🐍 Serpent Duels
 
-> Gameplay system: **PAS** — traced planning, turn-based with simultaneous resolution; movement budget is the **sillage** (your body's length). See [PAS-MECHANIQUE.md](./PAS-MECHANIQUE.md): only these two names are official, everything else is described in plain words. Reused by future games.
+> Gameplay system: **PAS** — draw your moves, turn by turn, simultaneous resolution. Movement: the **sillage** — a virtual reach circle that shrinks as you move. See [PAS-MECHANIQUE.md](./PAS-MECHANIQUE.md).
 
 Turn-based 3D strategy game with **simultaneous resolution**, built with Three.js in a single `index.html` file — no build step, no dependencies.
 
