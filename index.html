@@ -62,7 +62,7 @@
 
 <div id="overlay">
   <h1>🐍 Serpent Duels</h1>
-  <p>Planification dessinée à la souris : le cercle jaune (ta portée, égale à la longueur du serpent) suit le tracé et rétrécit au fur et à mesure.
+  <p>Planification dessinée à la souris : le cercle jaune (ton sillage, égal à la longueur du serpent) suit le tracé et rétrécit au fur et à mesure.
   Puis résolution simultanée : mords le corps adverse pour le couper — trop court, il périt (surveille la queue !).
   Ramasse les pastilles pour grandir, dasher, scinder ou devenir bicéphale.</p>
   <div class="buttons" id="modeRow">
@@ -369,7 +369,7 @@ function endToMenu(){
   clearDraw();
   document.querySelector('#overlay h1').textContent = '🐍 Serpent Duels';
   document.querySelector('#overlay p').innerHTML =
-    "Planification dessinée à la souris : le cercle jaune (ta portée, égale à la longueur du serpent) suit le tracé et rétrécit au fur et à mesure. Puis résolution simultanée : mords le corps adverse pour le couper — trop court, il périt. Ramasse les pastilles pour grandir, dasher, scinder ou devenir bicéphale.";
+    "Planification dessinée à la souris : le cercle jaune (ton sillage, égal à la longueur du serpent) suit le tracé et rétrécit au fur et à mesure. Puis résolution simultanée : mords le corps adverse pour le couper — trop court, il périt. Ramasse les pastilles pour grandir, dasher, scinder ou devenir bicéphale.";
   diffRow.style.display = 'none';
   modeRow.style.display = 'flex';
   overlay.style.display = 'flex';
@@ -720,7 +720,7 @@ function updateHUD(txt){
     const head = st.snake.heads[st.headIdx];
     const budget = (head.maxLen != null) ? head.maxLen : st.snake.length * SEG;
     const used = drawnPath.length ? pathLength([head.path[0], ...drawnPath]) : 0;
-    budgetEl.textContent = `Portée (longueur du serpent) : ${Math.max(0, budget - used).toFixed(1)} unités restantes`;
+    budgetEl.textContent = `Sillage restant : ${Math.max(0, budget - used).toFixed(1)} unités`;
   } else budgetEl.textContent = '';
 }
 
@@ -828,7 +828,7 @@ btnClear.onclick = ()=>{
   drawnPath = [];
   st.snake.heads[st.headIdx].path = [st.snake.heads[st.headIdx].pos.clone()];
   updateDrawVisuals();
-  updateHUD('Tracé effacé — redessine (le cercle part de la tête, puis suit le tracé)');
+  updateHUD('Tracé effacé — redessine (l\'Anneau-Jauge part de la tête, puis suit le tracé)');
   btnResolve.disabled = false;
   btnResolve.textContent = 'Résolution ▶';
 };
