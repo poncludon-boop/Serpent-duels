@@ -16,16 +16,16 @@ Open `index.html` in any modern browser (or enable **Settings → Pages → main
   - 🔵 **Dash** — stored; activate it yourself during planning (⚡ button) to pass through one collision
   - 🔴 **Fireball** — instantly strikes the nearest enemy head
   - 🟣 **Split** — divide your snake into two smaller controllable snakes
-  - 🟠 **Bicephalous** — requires 3+ body segments: the body splits into two equal parts (odd surplus goes to the body); the first part becomes the body, the second is split into two equal necks, each tipped with a head. Planning order: body, then head A, then head B.
+  - 🟠 **Bicephalous** — hydra-style: requires 3+ body segments; the body splits into two equal parts (odd surplus goes to the body). The first part stays the body (tail intact), and the second part is split into two equal necks pointing forward from the head root, like a two-headed dragon. Planning order: body, then head A, then head B, both freeing within their neck length.
 - Only grow pellets spawn during the first 5 turns.
 - The reach circle follows your drawn path (not the head) and shrinks as you draw.
 - A distinct tail tip marks the snake's end; the body turns red when one hit away from death — if cut below the minimum, the snake dies with a burst.
 
 ## AI difficulties
 
-- **Easy** — watches your movement and plays to lose (drifts along the border)
+- **Easy** — watches your movement, flees from you and ignores pellets (plays to lose, but stays in the arena)
 - **Medium** — hunts pellets and looks for openings against you
-- **Hard** — predicts your planned path every turn and counters it (interception or evasion)
+- **Hard** — predicts your planned path every turn, simulates both moves in time and strikes where your body will be (or defends by keeping its distance); arms its stored dash when pinned
 
 ## Modes
 
