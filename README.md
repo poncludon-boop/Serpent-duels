@@ -13,10 +13,19 @@ Open `index.html` in any modern browser (or enable **Settings → Pages → main
 - **Power-up pellets** scattered on the map:
   - 🟢 **Grow** — +5 segments
   - 🟡 **Speed** — burst of speed for the next turn
-  - 🔵 **Dash** — pass through the first collision once
+  - 🔵 **Dash** — stored; activate it yourself during planning (⚡ button) to pass through one collision
   - 🔴 **Fireball** — instantly strikes the nearest enemy head
   - 🟣 **Split** — divide your snake into two smaller controllable snakes
-  - 🟠 **Bicephalous** — gain a second head (planned after the body, anchored to the tail with a limited neck)
+  - 🟠 **Bicephalous** — requires 3+ body segments: the body splits into two equal parts (odd surplus goes to the body); the first part becomes the body, the second is split into two equal necks, each tipped with a head. Planning order: body, then head A, then head B.
+- Only grow pellets spawn during the first 5 turns.
+- The reach circle follows your drawn path (not the head) and shrinks as you draw.
+- A distinct tail tip marks the snake's end; the body turns red when one hit away from death — if cut below the minimum, the snake dies with a burst.
+
+## AI difficulties
+
+- **Easy** — watches your movement and plays to lose (drifts along the border)
+- **Medium** — hunts pellets and looks for openings against you
+- **Hard** — predicts your planned path every turn and counters it (interception or evasion)
 
 ## Modes
 
