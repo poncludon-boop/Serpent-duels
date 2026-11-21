@@ -828,7 +828,7 @@ btnClear.onclick = ()=>{
   drawnPath = [];
   st.snake.heads[st.headIdx].path = [st.snake.heads[st.headIdx].pos.clone()];
   updateDrawVisuals();
-  updateHUD('Tracé effacé — redessine (l\'Anneau-Jauge part de la tête, puis suit le tracé)');
+  updateHUD('Tracé effacé — redessine (le cercle part de la tête, puis suit le tracé)');
   btnResolve.disabled = false;
   btnResolve.textContent = 'Résolution ▶';
 };
